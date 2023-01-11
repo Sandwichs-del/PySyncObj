@@ -562,12 +562,12 @@ class TCPTransport(Transport):
         :rtype bool
         """
 
-        if node not in self._connections or self._connections[node].state != CONNECTION_STATE.CONNECTED:
+        if node not in self._connections or self._connections[node].state < CONNECTION_STATE.CONNECTED:
             return False
         if self._send_random_sleep_duration:
             time.sleep(random.random() * self._send_random_sleep_duration)
         self._connections[node].send(message)
-        if self._connections[node].state != CONNECTION_STATE.CONNECTED:
+        if self._connections[node].state < CONNECTION_STATE.CONNECTED:
             return False
         return True
 
