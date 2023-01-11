@@ -15,6 +15,7 @@ class CONNECTION_STATE:
     DISCONNECTED = 0
     CONNECTING = 1
     CONNECTED = 2
+    AUTHENTICATED = 3
 
 def _getAddrType(addr):
     try:
@@ -232,9 +233,11 @@ class TcpConnection(object):
         try:
             l = struct.unpack('i', self.__readBuffer[:4])[0]
             assert l > 0, "Negative length: %d" & l
-            if self.encryptor and not self.sendRandKey:
-                # Connection is not yet authenticated -> apply strict limits to sizes of first message:
-                #    our 32-byte sendRandKey - usually 228 or 312 bytes depending on compressibility
+            if self.encryptor and self.__state != CONNECTION_STATE.AUTHENTICATED:
+                # Connection is not yet authenticated -> apply strict limits to sizes of these messages:
+                # 1) our 32-byte sendRandKey - usually 228 or 312 bytes depending on compressibility
+                # 2) for incomming connection, the receiving peer's "SelfAddress" - not expected to be long
+                # 3) for utility connections, the executed command - also not expected to be too long
                 assert l < 1024, "Oversize length: %d" % l
             if len(self.__readBuffer) - 4 < l:
                 return None
@@ -249,6 +252,8 @@ class TcpConnection(object):
             if self.recvRandKey:
                 randKey, message = message
                 assert randKey == self.recvRandKey, "Replay - recvRandKey"
+                if self.__state == CONNECTION_STATE.CONNECTED:
+                    self.__state = CONNECTION_STATE.AUTHENTICATED
         except Exception as e:
             try: peername = self.__socket.getpeername()[0]
             except Exception as e2: peername = "(%s)" % repr(e2)
