@@ -206,8 +206,8 @@ class TcpConnection(object):
             return False
 
     def __tryReadBuffer(self):
-        while self.__processRead():
-            pass
+        # Try reading up to one buffer size, then allow __processParseMessage to run
+        self.__processRead()
         self.__lastReadTime = monotonicTime()
 
     def __processRead(self):
@@ -229,11 +229,16 @@ class TcpConnection(object):
     def __processParseMessage(self):
         if len(self.__readBuffer) < 4:
             return None
-        l = struct.unpack('i', self.__readBuffer[:4])[0]
-        if len(self.__readBuffer) - 4 < l:
-            return None
-        data = self.__readBuffer[4:4 + l]
         try:
+            l = struct.unpack('i', self.__readBuffer[:4])[0]
+            assert l > 0, "Negative length: %d" & l
+            if self.encryptor and not self.sendRandKey:
+                # Connection is not yet authenticated -> apply strict limits to sizes of first message:
+                #    our 32-byte sendRandKey - usually 228 or 312 bytes depending on compressibility
+                assert l < 1024, "Oversize length: %d" % l
+            if len(self.__readBuffer) - 4 < l:
+                return None
+            data = self.__readBuffer[4:4 + l]
             if self.encryptor:
                 dataTimestamp = self.encryptor.extract_timestamp(data)
                 assert dataTimestamp >= self.recvLastTimestamp, "Replay - timestamp"
